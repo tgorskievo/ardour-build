@@ -2,6 +2,12 @@
 
 ## Note
 
+### `FORK EDIT`
+Added a separated workflow for Apple M1 ARM architecture. 
+Only the version is updated from 6.8 to 7.5. 
+Artifacts should be available on success build. 
+- .dmg file for silicon apple processor 
+
 waf configure without `--freebie`
 
 ## Steps
