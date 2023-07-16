@@ -28,6 +28,7 @@ env:
 jobs:
   ardour-build:
     name: Ardour Build for MacOS ${{ matrix.config.arch }}
+    timeout-minutes: 900
     runs-on: macos-11
     strategy:
       fail-fast: false
