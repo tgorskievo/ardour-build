@@ -1,0 +1,160 @@
+# hardcoded 7.5 MacOS for M1 architecture
+
+name: Ardour 7.5 Build for Apple Silicon M1 (ARM64)
+
+on:
+  push:
+    branches: 
+      - macos
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+  pull_request:
+    branches: 
+      - macos
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+  workflow_dispatch:
+    types: ardour-macos-silicon-arm64-build
+
+env:
+  ARDOUR_VERSION: 7.5
+  # available upload services: wetransfer.com, file.io, 0x0.st
+  UPLOAD_SERVICE: wetransfer.com
+  # https://community.ardour.org/srctar
+  # https://fossies.org/linux/misc/Ardour-6.8.0.tar.bz2
+
+jobs:
+  ardour-build:
+    name: Ardour Build for MacOS ${{ matrix.config.arch }}
+    runs-on: macos-11
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+           - {
+              # requires macOS 11.0 SDK (or later)
+               arch: arm64
+             }
+    steps:
+      
+      # - name: Download CA Certification
+      #   # https://stackoverflow.com/a/54503009
+      #   shell: bash
+      #   run: |
+      #     brew info openssl
+
+      #     echo "Downloading cacert.pem..."
+      #     curl -sSL http://curl.haxx.se/ca/cacert.pem >> cacert.pem
+
+      #     mv -v cacert.pem /usr/local/etc/openssl@1.1/certs
+
+      # https://command-not-found.com/cpanm
+      - name: Install XML::Parser perl module
+        shell: bash
+        run: |
+          brew install cpanminus
+          cpanm XML::Parser
+
+      - name: Check XML::Parser perl module
+        shell: bash
+        run: |
+          perl -e "require XML::Parser"
+
+      - name: Checkout Build Tools
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ github.repository }}
+          fetch-depth: 0
+          ref: macos
+          path: '.'
+
+      - name: Get Ardour Latest Release Source Code
+        uses: actions/checkout@v2
+        with:
+          repository: 'Ardour/ardour'
+          fetch-depth: 1
+          ref: ${{ env.ARDOUR_VERSION }}
+          path: './src'
+        
+      - name: Print Clang & Perl Version
+        # https://stackoverflow.com/a/20874420
+        shell: bash
+        run: |
+          clang --version
+          echo "==============================================="
+          perl -V
+
+      - name: Prepare
+        shell: bash
+        run: |
+          chmod a+x ${{ github.workspace }}/ci/waf
+          chmod a+x ${{ github.workspace }}/ci/rb-wscript
+          chmod a+x ${{ github.workspace }}/ci/vamp-wscript
+
+      # https://stackoverflow.com/questions/11287564/getting-sed-error-illegal-byte-sequence-in-bash
+      - name: Set env
+        if: matrix.config.arch == 'x86_64'
+        shell: bash
+        run: |
+          echo "LC_CTYPE=C" >> $GITHUB_ENV
+          echo "HOME=${{ github.workspace }}/macos-${{ matrix.config.arch }}" >> $GITHUB_ENV
+          echo "PATH=/usr/lib/ccache:${{ github.workspace }}/macos-${{ matrix.config.arch }}/bin:${{ github.workspace }}/macos-${{ matrix.config.arch }}/gtk/inst/bin/:$PATH" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=${{ github.workspace }}/macos-${{ matrix.config.arch }}/gtk/inst/lib/pkgconfig/:/usr/lib/i386-linux-gnu/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig/" >> $GITHUB_ENV
+          echo "PYTHONPATH=./:${{ github.workspace }}/macos-${{ matrix.config.arch }}/gtk/inst/lib/python`python --version 2>&1 | cut -d ' ' -f 2 | cut -b 1-3`/site-packages/" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=${{ github.workspace }}/macos-${{ matrix.config.arch }}/gtk/inst/lib/" >> $GITHUB_ENV
+          echo "PERL5LIB=/usr/local/Cellar/perl/`perl -e 'print substr($^V, 1)'`/lib/perl5/site_perl/`perl -e 'print substr($^V, 1)'`:/usr/local/Cellar/perl/`perl -e 'print substr($^V, 1)'`/lib/perl5/`perl -e 'print substr($^V, 1)'`:/usr/local/lib/perl5/site_perl/`perl -e 'print substr($^V, 1)'`:" >> $GITHUB_ENV      
+      - name: Set env
+        if: matrix.config.arch == 'arm64'
+        shell: bash
+        run: |
+          echo "LC_CTYPE=C" >> $GITHUB_ENV
+          echo "HOME=${{ github.workspace }}/macos-${{ matrix.config.arch }}" >> $GITHUB_ENV
+
+      - name: Print env
+        shell: bash
+        run: |
+          env
+
+      - name: Install Build Stack
+        if: matrix.config.arch == 'x86_64'
+        shell: bash
+        run: |
+          bash ${{ github.workspace }}/ci/build-stack
+
+      - name: Install Build Stack
+        if: matrix.config.arch == 'arm64'
+        shell: bash
+        run: |
+          bash ${{ github.workspace }}/ci/x-applearm.sh
+
+      - name: Compile
+        # --depstack-root defaults to ~ 
+        # nproc returns logical cores. The mac equivalent of that is sysctl -n hw.logicalcpu instead of sysctl -n hw.physicalcpu
+        shell: bash
+        run: |
+          cd ${{ github.workspace }}/src
+          python3 ./waf configure --arm64 --strict --with-backends=jack,coreaudio,dummy --ptformat --optimize
+          python3 ./waf -j$(sysctl -n hw.logicalcpu)
+          python3 ./waf i18n
+          python3 ./waf install
+
+      - name: Package
+        shell: bash
+        run: |
+          cd ${{ github.workspace }}/src/tools/osx_packaging
+          bash ./osx_build --nls --public
+
+      - name: Upload Binary
+        shell: bash
+        run: |
+          TEMP_DOWNLOAD_URL=$(sh ${{ github.workspace }}/ci/services/${{ env.UPLOAD_SERVICE }}.sh ${{ github.workspace }}/src/tools/osx_packaging/Ardour-*.dmg)
+          echo Download URL is $TEMP_DOWNLOAD_URL
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: Ardour-MacOS-Artifact
+          path: |
+            ${{ github.workspace }}/src/tools/osx_packaging/Ardour-*.dmg
