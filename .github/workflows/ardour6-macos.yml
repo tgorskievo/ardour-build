@@ -1,18 +1,18 @@
 name: Ardour Build for MacOS
 
 on:
-  push:
-    branches: 
-      - macos
-    paths-ignore:
-      - 'README.md'
-      - 'LICENSE'
-  pull_request:
-    branches: 
-      - macos
-    paths-ignore:
-      - 'README.md'
-      - 'LICENSE'
+  #push:
+  #  branches: 
+  #    - macos
+  #  paths-ignore:
+  #    - 'README.md'
+  #    - 'LICENSE'
+  #pull_request:
+  #  branches: 
+  #    - macos
+  #  paths-ignore:
+  #    - 'README.md'
+  #    - 'LICENSE'
   workflow_dispatch:
     types: ardour-macos-build
 
