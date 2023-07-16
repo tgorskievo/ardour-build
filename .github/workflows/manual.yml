@@ -28,7 +28,7 @@ env:
 jobs:
   ardour-build:
     name: Ardour Build for MacOS ${{ matrix.config.arch }}
-    timeout-minutes: 900
+    timeout-minutes: 120
     runs-on: macos-11
     strategy:
       fail-fast: false
@@ -136,7 +136,7 @@ jobs:
         shell: bash
         run: |
           cd ${{ github.workspace }}/src
-          python3 ./waf configure --arm64 --strict --with-backends=jack,coreaudio,dummy --ptformat --optimize
+          python3 ./waf configure --strict --with-backends=jack,coreaudio,dummy --ptformat --optimize
           python3 ./waf -j$(sysctl -n hw.logicalcpu)
           python3 ./waf i18n
           python3 ./waf install
